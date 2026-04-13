@@ -42,7 +42,7 @@ public class DomainService
         return (parts[0], parts[1], parts[2]);
     }
 
-    public void JoinDomain(string domain, string username, string password)
+    public void JoinDomain(string domain, string username, string password, int maxRetries = 3, int retryDelayMs = 3000)
     {
         using var searcher = new ManagementObjectSearcher(
             "SELECT * FROM Win32_ComputerSystem");
@@ -56,19 +56,33 @@ public class DomainService
                 ? username
                 : $"{domain}\\{username}";
 
-            var result = Convert.ToInt32(computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
+            int lastResult = 0;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                domain,            // Name - domain to join
-                password,          // Password
-                domainUser,        // UserName - domain\user format
-                string.Empty,      // AccountOU
-                (uint)1            // FJoinOptions - 1 = account creation
-            }));
+                var result = Convert.ToInt32(computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
+                {
+                    domain,
+                    password,
+                    domainUser,
+                    string.Empty,
+                    (uint)1
+                }));
 
-            if (result != 0)
-                throw new InvalidOperationException($"域加入失败 (WMI 返回码: {result}): {GetJoinError(result)}");
+                lastResult = result;
 
-            return;
+                if (result == 0)
+                {
+                    return;
+                }
+
+                if (attempt < maxRetries)
+                {
+                    var delay = retryDelayMs * attempt;
+                    System.Threading.Thread.Sleep(delay);
+                }
+            }
+
+            throw new InvalidOperationException($"域加入失败 (WMI 返回码: {lastResult}): {GetJoinError(lastResult)}");
         }
 
         throw new InvalidOperationException("未找到 Win32_ComputerSystem 对象");
@@ -78,8 +92,10 @@ public class DomainService
     {
         0 => "成功",
         5 => "访问被拒绝，请检查域账号权限",
+        64 => "计算机名格式不正确或与其他计算机冲突",
         87 => "参数无效",
         1326 => "用户名或密码错误",
+        1332 => "账户名与安全标识符间无映射",
         1355 => "找不到指定的域",
         2691 => "计算机已在域中",
         2224 => "计算机账号已存在",

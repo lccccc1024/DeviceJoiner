@@ -143,6 +143,7 @@ public partial class MainForm : Form
                 _logger.Info($"开始修改主机名: {txtCurrentHost.Text} -> {newHostname}");
                 _hostnameService.SetHostname(newHostname);
                 _logger.Info("主机名修改成功");
+                System.Threading.Thread.Sleep(3000);
             }
             else
             {
