@@ -1,3 +1,5 @@
+using System.Drawing;
+
 namespace DeviceJoiner;
 
 partial class MainForm
@@ -6,8 +8,12 @@ partial class MainForm
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && (components != null))
-            components.Dispose();
+        if (disposing)
+        {
+            if (_onLogHandler != null)
+                _logger.OnLog -= _onLogHandler;
+            components?.Dispose();
+        }
         base.Dispose(disposing);
     }
 

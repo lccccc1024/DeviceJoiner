@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Drawing;
 using DeviceJoiner.Config;
 using DeviceJoiner.Services;
 
@@ -11,7 +12,9 @@ public partial class MainForm : Form
     private readonly BiosService _biosService;
     private readonly HostnameService _hostnameService;
     private readonly DomainService _domainService;
+    private readonly ScheduledTaskService _taskService;
     private readonly Logger _logger;
+    private readonly Action<string> _onLogHandler;
     private string _sn = "";
 
     public MainForm()
@@ -23,42 +26,57 @@ public partial class MainForm : Form
         _biosService = new BiosService();
         _hostnameService = new HostnameService();
         _domainService = new DomainService();
+        _taskService = new ScheduledTaskService();
         _logger = new Logger(_config.LogPath);
 
-        _logger.OnLog += line =>
+        _onLogHandler = line =>
         {
             if (txtLog.InvokeRequired)
                 txtLog.Invoke(() => AppendLog(line));
             else
                 AppendLog(line);
         };
+        _logger.OnLog += _onLogHandler;
 
-        LoadInitialData();
+        _ = LoadInitialDataAsync();
     }
 
-    private void LoadInitialData()
+    private async Task LoadInitialDataAsync()
     {
-        try
+        await Task.Run(() =>
         {
-            _sn = _biosService.GetSerialNumber();
-            txtSn.Text = _sn;
-            _logger.Info($"读取 BIOS SN: {_sn}");
-        }
-        catch (Exception ex)
-        {
-            txtSn.Text = "读取失败";
-            _logger.Error($"读取 SN 失败: {ex.Message}");
-        }
+            try
+            {
+                _sn = _biosService.GetSerialNumber();
+                BeginInvoke(() =>
+                {
+                    txtSn.Text = _sn;
+                    _logger.Info($"读取 BIOS SN: {_sn}");
+                });
+            }
+            catch (Exception ex)
+            {
+                BeginInvoke(() =>
+                {
+                    txtSn.Text = "读取失败";
+                    _logger.Error($"读取 SN 失败: {ex.Message}");
+                });
+            }
 
-        txtCurrentHost.Text = _biosService.GetCurrentHostname();
-        _logger.Info($"当前主机名: {txtCurrentHost.Text}");
+            var hostname = _biosService.GetCurrentHostname();
+            BeginInvoke(() =>
+            {
+                txtCurrentHost.Text = hostname;
+                _logger.Info($"当前主机名: {hostname}");
 
-        txtTemplate.Text = _config.HostnameTemplate;
-        txtPrefix.Text = _config.Prefix;
-        txtDomain.Text = _config.Domain;
-        txtUser.Text = _config.DomainUser;
+                txtTemplate.Text = _config.HostnameTemplate;
+                txtPrefix.Text = _config.Prefix;
+                txtDomain.Text = _config.Domain;
+                txtUser.Text = _config.DomainUser;
 
-        UpdatePreview();
+                UpdatePreview();
+            });
+        });
     }
 
     private void OnConfigChanged(object? sender, EventArgs e)
@@ -97,7 +115,7 @@ public partial class MainForm : Form
         MessageBox.Show("配置已保存", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    private void BtnExecute_Click(object? sender, EventArgs e)
+    private async void BtnExecute_Click(object? sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(_sn))
         {
@@ -138,12 +156,15 @@ public partial class MainForm : Form
 
         try
         {
+            _domainService.SaveCredentials(txtDomain.Text, txtUser.Text, txtPass.Text);
+            _taskService.CreateTask();
+
             if (hostnameChanged)
             {
                 _logger.Info($"开始修改主机名: {txtCurrentHost.Text} -> {newHostname}");
-                _hostnameService.SetHostname(newHostname);
+                await Task.Run(() => _hostnameService.SetHostname(newHostname));
                 _logger.Info("主机名修改成功");
-                System.Threading.Thread.Sleep(3000);
+                await Task.Delay(3000);
             }
             else
             {
@@ -151,8 +172,12 @@ public partial class MainForm : Form
             }
 
             _logger.Info($"开始加入域: {txtDomain.Text}");
-            _domainService.JoinDomain(txtDomain.Text, txtUser.Text, txtPass.Text);
+            await Task.Run(() => _domainService.JoinDomainAsync(txtDomain.Text, txtUser.Text, txtPass.Text));
             _logger.Info("域加入成功！");
+
+            _taskService.DeleteTask();
+            _taskService.ClearRetryCount();
+            _domainService.CleanupCredentials();
 
             _logger.Info("保存配置...");
             _config.HostnameTemplate = txtTemplate.Text;

@@ -71,15 +71,51 @@ public class DomainService
                 lastResult = result;
 
                 if (result == 0)
-                {
                     return;
-                }
 
                 if (attempt < maxRetries)
+                    System.Threading.Thread.Sleep(retryDelayMs * attempt);
+            }
+
+            throw new InvalidOperationException($"域加入失败 (WMI 返回码: {lastResult}): {GetJoinError(lastResult)}");
+        }
+
+        throw new InvalidOperationException("未找到 Win32_ComputerSystem 对象");
+    }
+
+    public async Task JoinDomainAsync(string domain, string username, string password, int maxRetries = 3, int retryDelayMs = 3000)
+    {
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT * FROM Win32_ComputerSystem");
+        using var collection = searcher.Get();
+
+        foreach (ManagementBaseObject obj in collection)
+        {
+            using var computer = (ManagementObject)obj;
+
+            var domainUser = username.Contains('\\') || username.Contains('@')
+                ? username
+                : $"{domain}\\{username}";
+
+            int lastResult = 0;
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                var result = Convert.ToInt32(computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
                 {
-                    var delay = retryDelayMs * attempt;
-                    System.Threading.Thread.Sleep(delay);
-                }
+                    domain,
+                    password,
+                    domainUser,
+                    string.Empty,
+                    (uint)1
+                }));
+
+                lastResult = result;
+
+                if (result == 0)
+                    return;
+
+                if (attempt < maxRetries)
+                    await Task.Delay(retryDelayMs * attempt);
             }
 
             throw new InvalidOperationException($"域加入失败 (WMI 返回码: {lastResult}): {GetJoinError(lastResult)}");
