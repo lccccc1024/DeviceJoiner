@@ -14,7 +14,8 @@ public class ScheduledTaskService
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath)
             ?? AppDomain.CurrentDomain.BaseDirectory;
         _retryFilePath = Path.Combine(exeDir, RetryFile);
-        _exePath = Environment.ProcessPath ?? "";
+        _exePath = Environment.ProcessPath
+            ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppDomain.CurrentDomain.FriendlyName);
     }
 
     public void CreateTask()
@@ -23,11 +24,15 @@ public class ScheduledTaskService
         {
             FileName = "schtasks",
             Arguments = $"/Create /SC ONSTART /TN \"{TaskName}\" /TR \"\\\"{_exePath}\\\" --autojoin\" /F /RL HIGHEST",
-            UseShellExecute = true,
-            Verb = "runas"
+            UseShellExecute = false,
+            CreateNoWindow = true
         };
         using var process = Process.Start(psi);
-        process?.WaitForExit(30000);
+        if (process == null)
+            throw new InvalidOperationException("无法启动 schtasks 创建计划任务");
+        process.WaitForExit(30000);
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"创建计划任务失败 (schtasks 退出码: {process.ExitCode})");
     }
 
     public void DeleteTask()
@@ -40,7 +45,12 @@ public class ScheduledTaskService
             CreateNoWindow = true
         };
         using var process = Process.Start(psi);
-        process?.WaitForExit(30000);
+        if (process == null)
+            throw new InvalidOperationException("无法启动 schtasks 删除计划任务");
+        process.WaitForExit(30000);
+        // schtasks /Delete returns 0 on success, 1 if task doesn't exist — both are acceptable
+        if (process.ExitCode != 0 && process.ExitCode != 1)
+            throw new InvalidOperationException($"删除计划任务失败 (schtasks 退出码: {process.ExitCode})");
     }
 
     public int GetRetryCount()

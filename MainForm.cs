@@ -37,35 +37,39 @@ public partial class MainForm : Form
                 AppendLog(line);
         };
         _logger.OnLog += _onLogHandler;
+    }
 
-        _ = LoadInitialDataAsync();
+    protected override async void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        await LoadInitialDataAsync();
     }
 
     private async Task LoadInitialDataAsync()
     {
         await Task.Run(() =>
         {
+            string? snError = null;
             try
             {
                 _sn = _biosService.GetSerialNumber();
-                BeginInvoke(() =>
-                {
-                    txtSn.Text = _sn;
-                    _logger.Info($"读取 BIOS SN: {_sn}");
-                });
             }
             catch (Exception ex)
             {
-                BeginInvoke(() =>
-                {
-                    txtSn.Text = "读取失败";
-                    _logger.Error($"读取 SN 失败: {ex.Message}");
-                });
+                _sn = "读取失败";
+                snError = ex.Message;
             }
 
             var hostname = _biosService.GetCurrentHostname();
+
             BeginInvoke(() =>
             {
+                txtSn.Text = _sn;
+                if (snError == null)
+                    _logger.Info($"读取 BIOS SN: {_sn}");
+                else
+                    _logger.Error($"读取 SN 失败: {snError}");
+
                 txtCurrentHost.Text = hostname;
                 _logger.Info($"当前主机名: {hostname}");
 
@@ -172,7 +176,7 @@ public partial class MainForm : Form
             }
 
             _logger.Info($"开始加入域: {txtDomain.Text}");
-            await Task.Run(() => _domainService.JoinDomainAsync(txtDomain.Text, txtUser.Text, txtPass.Text));
+            await Task.Run(() => _domainService.JoinDomain(txtDomain.Text, txtUser.Text, txtPass.Text));
             _logger.Info("域加入成功！");
 
             _taskService.DeleteTask();
