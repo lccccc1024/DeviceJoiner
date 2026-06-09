@@ -32,3 +32,6 @@ publish/
 logs/
 *.log
 .djcred
+
+## CodeGraph (local dev tool index)
+.codegraph/
