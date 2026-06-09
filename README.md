@@ -18,7 +18,6 @@ Windows 设备加域工具。通过 GUI 读取 BIOS 序列号自动生成主机�
 ## 构建
 
 ```cmd
-cd DeviceJoiner
 dotnet publish DeviceJoiner.csproj -c Release
 ```
 
@@ -52,7 +51,6 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 ## 项目结构
 
 ```
-DeviceJoiner/
 ├── DeviceJoiner.sln
 ├── DeviceJoiner.csproj
 ├── Program.cs                    # 入口，管理员提权
