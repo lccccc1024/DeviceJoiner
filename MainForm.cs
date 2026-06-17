@@ -42,7 +42,14 @@ public partial class MainForm : Form
     protected override async void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        await LoadInitialDataAsync();
+        try
+        {
+            await LoadInitialDataAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error($"初始化加载失败: {ex.Message}");
+        }
     }
 
     private async Task LoadInitialDataAsync()
@@ -160,8 +167,8 @@ public partial class MainForm : Form
 
         try
         {
-            _domainService.SaveCredentials(txtDomain.Text, txtUser.Text, txtPass.Text);
             _taskService.CreateTask();
+            _domainService.SaveCredentials(txtDomain.Text, txtUser.Text, txtPass.Text);
 
             if (hostnameChanged)
             {
@@ -175,12 +182,15 @@ public partial class MainForm : Form
                 _logger.Info($"主机名无需修改: {newHostname}");
             }
 
+            if (IsDisposed) return;
+
             _logger.Info($"开始加入域: {txtDomain.Text}");
             await Task.Run(() => _domainService.JoinDomain(txtDomain.Text, txtUser.Text, txtPass.Text));
             _logger.Info("域加入成功！");
 
-            _taskService.DeleteTask();
-            _taskService.ClearRetryCount();
+            // 清理（每个步骤独立，某一步失败不影响后续步骤）
+            try { _taskService.DeleteTask(); } catch (Exception ex) { _logger.Warn($"删除计划任务失败: {ex.Message}"); }
+            try { _taskService.ClearRetryCount(); } catch (Exception ex) { _logger.Warn($"清除重试计数失败: {ex.Message}"); }
             _domainService.CleanupCredentials();
 
             _logger.Info("保存配置...");
@@ -189,6 +199,8 @@ public partial class MainForm : Form
             _config.Domain = txtDomain.Text;
             _config.DomainUser = txtUser.Text;
             _configManager.Save(_config);
+
+            if (IsDisposed) return;
 
             var result = MessageBox.Show(
                 "操作完成！\n\n" + (hostnameChanged ? "主机名已修改并成功加入域，重启后生效。" : "已成功加入域。") + "\n\n是否立即重启？",
@@ -204,12 +216,16 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
-            _logger.Error($"执行失败: {ex.Message}");
-            MessageBox.Show($"执行失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (!IsDisposed)
+            {
+                _logger.Error($"执行失败: {ex.Message}");
+                MessageBox.Show($"执行失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
         finally
         {
-            btnExecute.Enabled = true;
+            if (!IsDisposed)
+                btnExecute.Enabled = true;
         }
     }
 }

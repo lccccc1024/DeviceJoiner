@@ -77,9 +77,7 @@ static class Program
             if (retryCount >= config.MaxRetryCount)
             {
                 logger.Error($"已达到最大重试次数 ({config.MaxRetryCount})，放弃域加入");
-                taskService.DeleteTask();
-                taskService.ClearRetryCount();
-                domainService.CleanupCredentials();
+                SafeCleanup(taskService, domainService, logger);
                 return;
             }
 
@@ -87,9 +85,7 @@ static class Program
             domainService.JoinDomain(domain, username, password);
             logger.Info("域加入成功！");
 
-            taskService.DeleteTask();
-            taskService.ClearRetryCount();
-            domainService.CleanupCredentials();
+            SafeCleanup(taskService, domainService, logger);
             logger.Info("清理完成");
         }
         catch (Exception ex)
@@ -98,5 +94,12 @@ static class Program
             taskService.IncrementRetryCount();
             logger.Info("已更新重试计数，下次重启将重试");
         }
+    }
+
+    private static void SafeCleanup(ScheduledTaskService taskService, DomainService domainService, Logger logger)
+    {
+        try { taskService.DeleteTask(); } catch (Exception ex) { logger.Warn($"删除计划任务失败: {ex.Message}"); }
+        try { taskService.ClearRetryCount(); } catch (Exception ex) { logger.Warn($"清除重试计数失败: {ex.Message}"); }
+        try { domainService.CleanupCredentials(); } catch (Exception ex) { logger.Warn($"清理凭据失败: {ex.Message}"); }
     }
 }

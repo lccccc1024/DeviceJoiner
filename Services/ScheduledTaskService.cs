@@ -20,37 +20,37 @@ public class ScheduledTaskService
 
     public void CreateTask()
     {
-        var psi = new ProcessStartInfo
-        {
-            FileName = "schtasks",
-            Arguments = $"/Create /SC ONSTART /TN \"{TaskName}\" /TR \"\\\"{_exePath}\\\" --autojoin\" /F /RL HIGHEST",
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        using var process = Process.Start(psi);
-        if (process == null)
-            throw new InvalidOperationException("无法启动 schtasks 创建计划任务");
-        process.WaitForExit(30000);
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"创建计划任务失败 (schtasks 退出码: {process.ExitCode})");
+        var arguments = $"/Create /SC ONSTART /TN \"{TaskName}\" /TR \"\\\"{_exePath}\\\" --autojoin\" /F /RL HIGHEST";
+        RunSchtasks(arguments, 0);
     }
 
     public void DeleteTask()
     {
+        var arguments = $"/Delete /TN \"{TaskName}\" /F";
+        RunSchtasks(arguments, 0, 1);
+    }
+
+    private static void RunSchtasks(string arguments, params int[] acceptableExitCodes)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = "schtasks",
-            Arguments = $"/Delete /TN \"{TaskName}\" /F",
+            Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true
         };
         using var process = Process.Start(psi);
         if (process == null)
-            throw new InvalidOperationException("无法启动 schtasks 删除计划任务");
-        process.WaitForExit(30000);
-        // schtasks /Delete returns 0 on success, 1 if task doesn't exist — both are acceptable
-        if (process.ExitCode != 0 && process.ExitCode != 1)
-            throw new InvalidOperationException($"删除计划任务失败 (schtasks 退出码: {process.ExitCode})");
+            throw new InvalidOperationException("无法启动 schtasks");
+
+        if (!process.WaitForExit(30000))
+        {
+            try { process.Kill(); } catch { /* best effort */ }
+            throw new InvalidOperationException("schtasks 执行超时 (30秒)");
+        }
+
+        if (acceptableExitCodes.Length > 0 && !acceptableExitCodes.Contains(process.ExitCode))
+            throw new InvalidOperationException($"schtasks 失败 (退出码: {process.ExitCode})");
     }
 
     public int GetRetryCount()

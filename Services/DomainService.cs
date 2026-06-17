@@ -59,14 +59,17 @@ public class DomainService
             int lastResult = 0;
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                var result = Convert.ToInt32(computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
+                var rawResult = computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
                 {
                     domain,
                     password,
                     domainUser,
                     string.Empty,
                     (uint)1
-                }));
+                });
+                if (rawResult == null)
+                    throw new InvalidOperationException("WMI 调用 JoinDomainOrWorkgroup 返回 null，WMI 服务可能不可用");
+                var result = Convert.ToInt32(rawResult);
 
                 lastResult = result;
 
