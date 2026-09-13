@@ -6,7 +6,7 @@ Windows 设备加域工具。通过 GUI 读取 BIOS 序列号自动生成主机�
 
 - 读取 BIOS 序列号，按可配置模板生成主机名
 - 修改主机名（WMI）
-- 直接加入 Active Directory 域（WMI）
+- 直接加入 Active Directory 域（Windows WMI）
 - 操作过程实时日志显示
 
 ## 环境要求
@@ -35,11 +35,17 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 2. 确认 BIOS 序列号和当前主机名
 3. 配置主机名前缀、域名、域账号密码
 4. 点击「执行」完成主机名修改和域加入
-5. 重启使主机名生效
+5. 如提示成功，按提示重启；如果网络或域控暂时不可用，工具会在下次开机自动重试（最多 `MaxRetryCount` 次）
+
+## 安全说明
+
+- 域凭据仅为跨重启恢复流程临时保存，使用 Windows DPAPI（LocalMachine）加密，并限制文件 ACL 为 SYSTEM 和本地 Administrators。
+- 加域成功或达到最大重试次数后会删除凭据和计划任务。
+- `LocalMachine` DPAPI 不能抵御本机 SYSTEM/管理员级恶意软件。批量部署场景建议改用 Offline Domain Join（`djoin.exe`），避免在客户端保存域密码。
 
 ## 配置
 
-配置文件 `Config/appsettings.json`：
+配置文件为发布目录下的 `config/appsettings.json`（发布时自动复制）：
 
 | 字段 | 说明 | 默认值 |
 |------|------|--------|

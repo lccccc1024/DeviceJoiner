@@ -1,6 +1,9 @@
 using System.Management;
 using System.Security.Cryptography;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 
 namespace DeviceJoiner.Services;
 
@@ -8,6 +11,7 @@ public class DomainService
 {
     private const string CredFileName = ".djcred";
     private readonly string _credFilePath;
+    private static readonly byte[] CredentialEntropy = Encoding.UTF8.GetBytes("DeviceJoiner credential v1");
 
     public DomainService()
     {
@@ -18,12 +22,13 @@ public class DomainService
 
     public void SaveCredentials(string domain, string username, string password)
     {
-        var plainText = $"{domain}|{username}|{password}";
+        var plainText = JsonSerializer.Serialize(new CredentialData(domain, username, password));
         var encrypted = ProtectedData.Protect(
             Encoding.UTF8.GetBytes(plainText),
-            null,
+            CredentialEntropy,
             DataProtectionScope.LocalMachine);
         File.WriteAllBytes(_credFilePath, encrypted);
+        RestrictCredentialFile();
     }
 
     public (string Domain, string Username, string Password) LoadCredentials()
@@ -32,14 +37,22 @@ public class DomainService
             throw new FileNotFoundException("凭证文件不存在");
 
         var encrypted = File.ReadAllBytes(_credFilePath);
-        var plainBytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.LocalMachine);
-        var plainText = Encoding.UTF8.GetString(plainBytes);
-        var parts = plainText.Split('|', 3);
+        var plainBytes = ProtectedData.Unprotect(encrypted, CredentialEntropy, DataProtectionScope.LocalMachine);
+        CredentialData? data;
+        try
+        {
+            data = JsonSerializer.Deserialize<CredentialData>(plainBytes);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(plainBytes);
+        }
 
-        if (parts.Length != 3)
+        if (data is null || string.IsNullOrWhiteSpace(data.Domain) ||
+            string.IsNullOrWhiteSpace(data.Username) || string.IsNullOrEmpty(data.Password))
             throw new InvalidOperationException("凭证格式无效");
 
-        return (parts[0], parts[1], parts[2]);
+        return (data.Domain, data.Username, data.Password);
     }
 
     public void JoinDomain(string domain, string username, string password, int maxRetries = 3, int retryDelayMs = 3000)
@@ -65,7 +78,7 @@ public class DomainService
                     password,
                     domainUser,
                     string.Empty,
-                    (uint)1
+                    (uint)3 // JOIN_DOMAIN | ACCT_CREATE
                 });
                 if (rawResult == null)
                     throw new InvalidOperationException("WMI 调用 JoinDomainOrWorkgroup 返回 null，WMI 服务可能不可用");
@@ -105,4 +118,36 @@ public class DomainService
         if (File.Exists(_credFilePath))
             File.Delete(_credFilePath);
     }
+
+    public bool IsJoinedToDomain(string domain)
+    {
+        using var searcher = new ManagementObjectSearcher(
+            "SELECT PartOfDomain, Domain FROM Win32_ComputerSystem");
+        using var collection = searcher.Get();
+        foreach (ManagementObject computer in collection)
+        {
+            using (computer)
+            {
+                var partOfDomain = computer["PartOfDomain"] is bool value && value;
+                var currentDomain = computer["Domain"]?.ToString();
+                return partOfDomain && string.Equals(currentDomain, domain, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        return false;
+    }
+
+    private void RestrictCredentialFile()
+    {
+        var security = new FileSecurity();
+        security.SetAccessRuleProtection(true, false);
+        security.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            FileSystemRights.FullControl, AccessControlType.Allow));
+        security.AddAccessRule(new FileSystemAccessRule(
+            new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+            FileSystemRights.FullControl, AccessControlType.Allow));
+        new FileInfo(_credFilePath).SetAccessControl(security);
+    }
+
+    private sealed record CredentialData(string Domain, string Username, string Password);
 }

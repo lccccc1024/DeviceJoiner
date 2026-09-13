@@ -20,25 +20,26 @@ public class ScheduledTaskService
 
     public void CreateTask()
     {
-        var arguments = $"/Create /SC ONSTART /TN \"{TaskName}\" /TR \"\\\"{_exePath}\\\" --autojoin\" /F /RL HIGHEST";
-        RunSchtasks(arguments, 0);
+        var taskCommand = $"\"{_exePath}\" --autojoin";
+        RunSchtasks(new[] { "/Create", "/SC", "ONSTART", "/TN", TaskName,
+            "/TR", taskCommand, "/RU", "SYSTEM", "/RL", "HIGHEST", "/F" }, 0);
     }
 
     public void DeleteTask()
     {
-        var arguments = $"/Delete /TN \"{TaskName}\" /F";
-        RunSchtasks(arguments, 0, 1);
+        RunSchtasks(new[] { "/Delete", "/TN", TaskName, "/F" }, 0, 1);
     }
 
-    private static void RunSchtasks(string arguments, params int[] acceptableExitCodes)
+    private static void RunSchtasks(IEnumerable<string> arguments, params int[] acceptableExitCodes)
     {
         var psi = new ProcessStartInfo
         {
             FileName = "schtasks",
-            Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        foreach (var argument in arguments)
+            psi.ArgumentList.Add(argument);
         using var process = Process.Start(psi);
         if (process == null)
             throw new InvalidOperationException("无法启动 schtasks");
@@ -58,13 +59,15 @@ public class ScheduledTaskService
         if (!File.Exists(_retryFilePath))
             return 0;
         var text = File.ReadAllText(_retryFilePath);
-        return int.TryParse(text, out var count) ? count : 0;
+        return int.TryParse(text, out var count) && count >= 0 ? count : 0;
     }
 
     public void IncrementRetryCount()
     {
         var count = GetRetryCount() + 1;
-        File.WriteAllText(_retryFilePath, count.ToString());
+        var tempPath = _retryFilePath + ".tmp";
+        File.WriteAllText(tempPath, count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        File.Move(tempPath, _retryFilePath, true);
     }
 
     public void ClearRetryCount()

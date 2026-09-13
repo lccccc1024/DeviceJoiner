@@ -21,7 +21,9 @@ static class Program
 
         if (args.Length > 0 && args[0] == "--autojoin")
         {
-            RunAutoJoin();
+            using var mutex = new Mutex(true, "Global\\DeviceJoinerAutoJoin", out var created);
+            if (created)
+                RunAutoJoin();
         }
         else
         {
@@ -71,6 +73,13 @@ static class Program
             var (domain, username, password) = domainService.LoadCredentials();
             logger.Info($"读取凭证成功，域: {domain}");
 
+            if (domainService.IsJoinedToDomain(domain))
+            {
+                logger.Info("设备已经加入目标域，执行清理");
+                SafeCleanup(taskService, domainService, logger);
+                return;
+            }
+
             var retryCount = taskService.GetRetryCount();
             logger.Info($"当前重试次数: {retryCount}/{config.MaxRetryCount}");
 
@@ -91,8 +100,15 @@ static class Program
         catch (Exception ex)
         {
             logger.Error($"自动加入失败: {ex.Message}");
-            taskService.IncrementRetryCount();
-            logger.Info("已更新重试计数，下次重启将重试");
+            try
+            {
+                taskService.IncrementRetryCount();
+                logger.Info("已更新重试计数，下次重启将重试");
+            }
+            catch (Exception retryEx)
+            {
+                logger.Error($"更新重试计数失败: {retryEx.Message}");
+            }
         }
     }
 

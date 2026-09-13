@@ -135,6 +135,9 @@ public partial class MainForm : Form
         }
 
         var newHostname = _hostnameService.BuildHostname(txtTemplate.Text, txtPrefix.Text, _sn);
+        var domain = txtDomain.Text.Trim();
+        var username = txtUser.Text.Trim();
+        var password = txtPass.Text;
 
         if (!_hostnameService.IsValidHostname(newHostname))
         {
@@ -142,13 +145,13 @@ public partial class MainForm : Form
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(txtDomain.Text))
+        if (string.IsNullOrWhiteSpace(domain))
         {
             MessageBox.Show("请输入域名", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(txtUser.Text) || string.IsNullOrEmpty(txtPass.Text))
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
         {
             MessageBox.Show("请输入域账号和密码", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
@@ -156,19 +159,22 @@ public partial class MainForm : Form
 
         var hostnameChanged = !string.Equals(txtCurrentHost.Text, newHostname, StringComparison.OrdinalIgnoreCase);
         var confirmMsg = hostnameChanged
-            ? $"主机名将从 '{txtCurrentHost.Text}' 改为 '{newHostname}'，并立即加入域 '{txtDomain.Text}'\n\n确认执行？执行后需要重启才能使主机名生效。"
-            : $"主机名 '{newHostname}' 无需修改，将直接加入域 '{txtDomain.Text}'\n\n确认执行？";
+            ? $"主机名将从 '{txtCurrentHost.Text}' 改为 '{newHostname}'，并立即加入域 '{domain}'\n\n确认执行？执行后需要重启才能使主机名生效。"
+            : $"主机名 '{newHostname}' 无需修改，将直接加入域 '{domain}'\n\n确认执行？";
 
         var confirm = MessageBox.Show(confirmMsg, "确认", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (confirm != DialogResult.Yes)
             return;
 
         btnExecute.Enabled = false;
+        var recoveryArmed = false;
 
         try
         {
+            _domainService.SaveCredentials(domain, username, password);
             _taskService.CreateTask();
-            _domainService.SaveCredentials(txtDomain.Text, txtUser.Text, txtPass.Text);
+            recoveryArmed = true;
+            txtPass.Clear();
 
             if (hostnameChanged)
             {
@@ -184,8 +190,8 @@ public partial class MainForm : Form
 
             if (IsDisposed) return;
 
-            _logger.Info($"开始加入域: {txtDomain.Text}");
-            await Task.Run(() => _domainService.JoinDomain(txtDomain.Text, txtUser.Text, txtPass.Text));
+            _logger.Info($"开始加入域: {domain}");
+            await Task.Run(() => _domainService.JoinDomain(domain, username, password));
             _logger.Info("域加入成功！");
 
             // 清理（每个步骤独立，某一步失败不影响后续步骤）
@@ -194,11 +200,18 @@ public partial class MainForm : Form
             _domainService.CleanupCredentials();
 
             _logger.Info("保存配置...");
-            _config.HostnameTemplate = txtTemplate.Text;
-            _config.Prefix = txtPrefix.Text;
-            _config.Domain = txtDomain.Text;
-            _config.DomainUser = txtUser.Text;
-            _configManager.Save(_config);
+            try
+            {
+                _config.HostnameTemplate = txtTemplate.Text;
+                _config.Prefix = txtPrefix.Text;
+                _config.Domain = domain;
+                _config.DomainUser = username;
+                _configManager.Save(_config);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn($"保存配置失败（不影响加域结果）: {ex.Message}");
+            }
 
             if (IsDisposed) return;
 
@@ -216,6 +229,11 @@ public partial class MainForm : Form
         }
         catch (Exception ex)
         {
+            if (!recoveryArmed)
+            {
+                try { _taskService.DeleteTask(); } catch { /* best effort */ }
+                try { _domainService.CleanupCredentials(); } catch { /* best effort */ }
+            }
             if (!IsDisposed)
             {
                 _logger.Error($"执行失败: {ex.Message}");

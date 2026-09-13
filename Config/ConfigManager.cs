@@ -24,10 +24,13 @@ public class ConfigManager
         try
         {
             var json = File.ReadAllText(_configPath);
-            return JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            var config = JsonSerializer.Deserialize<AppConfig>(json) ?? new AppConfig();
+            config.Normalize();
+            return config;
         }
-        catch
+        catch (JsonException ex)
         {
+            System.Diagnostics.Trace.TraceError($"配置文件格式无效: {ex.Message}");
             return new AppConfig();
         }
     }
@@ -40,6 +43,8 @@ public class ConfigManager
 
         var options = new JsonSerializerOptions { WriteIndented = true };
         var json = JsonSerializer.Serialize(config, options);
-        File.WriteAllText(_configPath, json);
+        var tempPath = _configPath + ".tmp";
+        File.WriteAllText(tempPath, json, System.Text.Encoding.UTF8);
+        File.Move(tempPath, _configPath, true);
     }
 }
