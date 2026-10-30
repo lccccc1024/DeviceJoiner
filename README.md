@@ -31,7 +31,7 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 
 ## 使用
 
-1. 以管理员身份运行 `DeviceJoiner.exe`（会自动请求 UAC 提权）
+1. 把 `DeviceJoiner.exe` 放在**仅管理员可写**的目录（推荐 `C:\Program Files\DeviceJoiner\`），再以管理员身份运行（会自动请求 UAC 提权）。若所在目录允许普通用户写入（桌面、下载目录、公共共享盘等），工具会拒绝创建开机自启任务并说明原因
 2. 确认 BIOS 序列号和当前主机名
 3. 配置主机名前缀、域名、域账号密码
 4. 点击「执行」完成主机名修改和域加入
@@ -40,6 +40,7 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 ## 安全说明
 
 - 域凭据仅为跨重启恢复流程临时保存，使用 Windows DPAPI（LocalMachine）加密，并限制文件 ACL 为 SYSTEM 和本地 Administrators。
+- 创建开机自启任务前会校验 exe 所在目录的权限：只要存在 `Everyone` / `Users` / `Authenticated Users` / `INTERACTIVE` 等非特权主体的可写 ACE（含继承），就直接拒绝创建任务。原因是该任务以 SYSTEM 身份运行 exe，普通用户替换 exe 即可获得系统权限。
 - 加域成功或达到最大重试次数后会删除凭据和计划任务。
 - `LocalMachine` DPAPI 不能抵御本机 SYSTEM/管理员级恶意软件。批量部署场景建议改用 Offline Domain Join（`djoin.exe`），避免在客户端保存域密码。
 
