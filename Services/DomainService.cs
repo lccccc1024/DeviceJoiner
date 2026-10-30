@@ -103,7 +103,7 @@ public class DomainService
 
                 // 返回码是确定性结果（口令错误、域不存在、权限不足、计算机名冲突等），立即失败。
                 // 对这些错误重试不会改变结果，只会在 AD 上累积失败登录，可能触发账户锁定策略。
-                throw new InvalidOperationException($"域加入失败 (WMI 返回码: {result}): {GetJoinError(result)}");
+                throw new DomainJoinException($"域加入失败 (WMI 返回码: {result}): {GetJoinError(result)}", result);
             }
         }
 

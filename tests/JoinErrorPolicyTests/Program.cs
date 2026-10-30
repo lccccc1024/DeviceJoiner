@@ -51,6 +51,12 @@ internal static class Program
         Check(!JoinErrorPolicy.IsTransient(null),
             "null 不重试");
 
+        // 返回码类失败通过 DomainJoinException 透传，外层据此放弃跨开机重试
+        var joinFailure = new DomainJoinException("域加入失败", 1326);
+        Check(!joinFailure.IsRetryable, "DomainJoinException 默认不可重试");
+        Check(joinFailure.WmiReturnCode == 1326, "DomainJoinException 保留 WMI 返回码");
+        Check(joinFailure is Exception, "DomainJoinException 可被通用 catch 捕获");
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0
             ? "全部通过"
