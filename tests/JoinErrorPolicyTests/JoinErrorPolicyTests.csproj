@@ -13,6 +13,7 @@
     <!-- 直接链接被测文件，避免为了一个纯函数把 WinForms 项目拖进测试工程 -->
     <Compile Include="..\..\Services\JoinErrorPolicy.cs" Link="Services\JoinErrorPolicy.cs" />
     <Compile Include="..\..\Services\DomainJoinException.cs" Link="Services\DomainJoinException.cs" />
+    <Compile Include="..\..\Services\TaskPathPolicy.cs" Link="Services\TaskPathPolicy.cs" />
   </ItemGroup>
 
 </Project>
