@@ -108,6 +108,10 @@ static class Program
             catch (Exception retryEx)
             {
                 logger.Error($"更新重试计数失败: {retryEx.Message}");
+                // 计数写不进去就不能安全重试：计划任务若保留，会在每次开机时重跑，
+                // 形成无限重试。此处按失败处理，清掉任务与凭据后放弃。
+                logger.Error("无法记录重试次数，为避免开机无限重试，放弃并清理");
+                SafeCleanup(taskService, domainService, logger);
             }
         }
     }
