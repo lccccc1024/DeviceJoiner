@@ -15,6 +15,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 项目文件在仓库根目录，默认会把 tests/ 下的源码一起编译（与测试工程的入口点冲突） -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
     <None Update="Config\appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="System.Management" Version="8.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
