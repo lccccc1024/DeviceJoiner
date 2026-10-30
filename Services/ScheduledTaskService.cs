@@ -11,12 +11,15 @@ public class ScheduledTaskService
 
     public ScheduledTaskService()
     {
-        var exeDir = Path.GetDirectoryName(Environment.ProcessPath)
-            ?? AppDomain.CurrentDomain.BaseDirectory;
-        _retryFilePath = Path.Combine(exeDir, RetryFile);
+        // 重试计数写在 ProgramData 而不是 exe 所在目录：便携部署时 exe 目录常常不可写，
+        // 一旦写失败就会退化成"每次开机无限重试"。
+        _retryFilePath = Path.Combine(RetryDirectory, RetryFile);
         _exePath = Environment.ProcessPath
             ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, AppDomain.CurrentDomain.FriendlyName);
     }
+
+    private static string RetryDirectory => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "DeviceJoiner");
 
     public void CreateTask()
     {
@@ -64,6 +67,7 @@ public class ScheduledTaskService
 
     public void IncrementRetryCount()
     {
+        Directory.CreateDirectory(RetryDirectory);
         var count = GetRetryCount() + 1;
         var tempPath = _retryFilePath + ".tmp";
         File.WriteAllText(tempPath, count.ToString(System.Globalization.CultureInfo.InvariantCulture));
