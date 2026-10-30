@@ -1,4 +1,5 @@
 using System.Management;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.AccessControl;
 using System.Security.Principal;
@@ -57,6 +58,9 @@ public class DomainService
 
     public void JoinDomain(string domain, string username, string password, int maxRetries = 3, int retryDelayMs = 3000)
     {
+        if (maxRetries < 1)
+            maxRetries = 1;
+
         using var searcher = new ManagementObjectSearcher(
             "SELECT * FROM Win32_ComputerSystem");
         using var collection = searcher.Get();
@@ -69,31 +73,38 @@ public class DomainService
                 ? username
                 : $"{domain}\\{username}";
 
-            int lastResult = 0;
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
-                var rawResult = computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
+                object? rawResult;
+                try
                 {
-                    domain,
-                    password,
-                    domainUser,
-                    string.Empty,
-                    (uint)3 // JOIN_DOMAIN | ACCT_CREATE
-                });
+                    rawResult = computer.InvokeMethod("JoinDomainOrWorkgroup", new object[]
+                    {
+                        domain,
+                        password,
+                        domainUser,
+                        string.Empty,
+                        (uint)3 // JOIN_DOMAIN | ACCT_CREATE
+                    });
+                }
+                catch (COMException ex) when (attempt < maxRetries && JoinErrorPolicy.IsTransient(ex))
+                {
+                    // RPC 瞬时故障：退避后重试。最后一次不吞异常，直接暴露给调用方。
+                    System.Threading.Thread.Sleep(retryDelayMs * attempt);
+                    continue;
+                }
+
                 if (rawResult == null)
                     throw new InvalidOperationException("WMI 调用 JoinDomainOrWorkgroup 返回 null，WMI 服务可能不可用");
+
                 var result = Convert.ToInt32(rawResult);
-
-                lastResult = result;
-
                 if (result == 0)
                     return;
 
-                if (attempt < maxRetries)
-                    System.Threading.Thread.Sleep(retryDelayMs * attempt);
+                // 返回码是确定性结果（口令错误、域不存在、权限不足、计算机名冲突等），立即失败。
+                // 对这些错误重试不会改变结果，只会在 AD 上累积失败登录，可能触发账户锁定策略。
+                throw new InvalidOperationException($"域加入失败 (WMI 返回码: {result}): {GetJoinError(result)}");
             }
-
-            throw new InvalidOperationException($"域加入失败 (WMI 返回码: {lastResult}): {GetJoinError(lastResult)}");
         }
 
         throw new InvalidOperationException("未找到 Win32_ComputerSystem 对象");
