@@ -73,6 +73,24 @@ internal static class Program
         Check(TaskPathPolicy.IsUnsafeAce(null, true, true), "空 SID 按不安全处理");
         Check(!TaskPathPolicy.IsUnsafeAce(null, true, false), "空 SID 但无写权限 => 不判为不安全");
 
+        // 日志超过阈值后滚成 .1，并继续写当前文件
+        var logDir = Path.Combine(Path.GetTempPath(), "dj-log-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var logPath = Path.Combine(logDir, "app.log");
+            var logger = new Logger(logPath, 120);
+            for (int i = 0; i < 12; i++) logger.Info("line-" + i);
+
+            Check(File.Exists(logPath + ".1"), "日志超过阈值后生成 .1 备份");
+            Check(File.Exists(logPath), "轮转后继续写当前日志");
+            var currentSize = new FileInfo(logPath).Length;
+            Check(currentSize < 400, $"当前日志保持较小（{currentSize} 字节）");
+        }
+        finally
+        {
+            try { Directory.Delete(logDir, true); } catch { /* best effort */ }
+        }
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0
             ? "全部通过"
