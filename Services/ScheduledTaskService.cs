@@ -23,6 +23,9 @@ public class ScheduledTaskService
 
     public void CreateTask()
     {
+        // 开机自启任务以 SYSTEM 运行；目录若对普通用户可写，exe 就能被替换成提权载荷。
+        ExecutablePathGuard.EnsureDirectoryIsProtected(_exePath);
+
         var taskCommand = $"\"{_exePath}\" --autojoin";
         RunSchtasks(new[] { "/Create", "/SC", "ONSTART", "/TN", TaskName,
             "/TR", taskCommand, "/RU", "SYSTEM", "/RL", "HIGHEST", "/F" }, 0);
