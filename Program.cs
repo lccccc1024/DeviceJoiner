@@ -100,6 +100,16 @@ static class Program
         catch (Exception ex)
         {
             logger.Error($"自动加入失败: {ex.Message}");
+
+            // 确定性失败（口令错误、域不存在、权限不足）跨开机重试也不会成功，
+            // 只会继续累积 AD 失败登录。直接放弃并清理，不再排下一次重试。
+            if (ex is DomainJoinException { IsRetryable: false })
+            {
+                logger.Error("属确定性失败，重试不会改变结果，放弃并清理");
+                SafeCleanup(taskService, domainService, logger);
+                return;
+            }
+
             try
             {
                 taskService.IncrementRetryCount();
