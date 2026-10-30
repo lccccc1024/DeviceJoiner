@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DeviceJoiner.Tests</RootNamespace>
+    <AssemblyName>JoinErrorPolicyTests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 直接链接被测文件，避免为了一个纯函数把 WinForms 项目拖进测试工程 -->
+    <Compile Include="..\..\Services\JoinErrorPolicy.cs" Link="Services\JoinErrorPolicy.cs" />
+  </ItemGroup>
+
+</Project>
