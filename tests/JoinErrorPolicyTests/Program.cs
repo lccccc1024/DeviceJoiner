@@ -57,6 +57,22 @@ internal static class Program
         Check(joinFailure.WmiReturnCode == 1326, "DomainJoinException 保留 WMI 返回码");
         Check(joinFailure is Exception, "DomainJoinException 可被通用 catch 捕获");
 
+        // 目录写权限判定：非特权主体 + Allow + 可写 => 不安全
+        Check(TaskPathPolicy.IsUnsafeAce("S-1-1-0", true, true), "Everyone 可写 => 不安全");
+        Check(TaskPathPolicy.IsUnsafeAce("S-1-5-32-545", true, true), "BUILTIN\\Users 可写 => 不安全");
+        Check(TaskPathPolicy.IsUnsafeAce("S-1-5-11", true, true), "Authenticated Users 可写 => 不安全");
+        Check(TaskPathPolicy.IsUnsafeAce("S-1-5-4", true, true), "INTERACTIVE 可写 => 不安全");
+
+        // 特权主体 / Deny 规则 / 无写权限 => 安全
+        Check(!TaskPathPolicy.IsUnsafeAce("S-1-5-21-1111-2222-3333-1001", true, true), "特定用户 SID 可写不判为不安全");
+        Check(!TaskPathPolicy.IsUnsafeAce("S-1-5-32-544", true, true), "Administrators 可写不判为不安全");
+        Check(!TaskPathPolicy.IsUnsafeAce("S-1-1-0", false, true), "Deny 规则不判为不安全");
+        Check(!TaskPathPolicy.IsUnsafeAce("S-1-1-0", true, false), "Everyone 只读不判为不安全");
+
+        // 解析不出 SID 时按最坏情况处理
+        Check(TaskPathPolicy.IsUnsafeAce(null, true, true), "空 SID 按不安全处理");
+        Check(!TaskPathPolicy.IsUnsafeAce(null, true, false), "空 SID 但无写权限 => 不判为不安全");
+
         Console.WriteLine();
         Console.WriteLine(_failures == 0
             ? "全部通过"
