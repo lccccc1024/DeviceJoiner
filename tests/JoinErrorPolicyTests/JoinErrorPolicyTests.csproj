@@ -14,6 +14,7 @@
     <Compile Include="..\..\Services\JoinErrorPolicy.cs" Link="Services\JoinErrorPolicy.cs" />
     <Compile Include="..\..\Services\DomainJoinException.cs" Link="Services\DomainJoinException.cs" />
     <Compile Include="..\..\Services\TaskPathPolicy.cs" Link="Services\TaskPathPolicy.cs" />
+    <Compile Include="..\..\Services\Logger.cs" Link="Services\Logger.cs" />
   </ItemGroup>
 
 </Project>
