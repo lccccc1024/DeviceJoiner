@@ -28,9 +28,25 @@ public class DomainService
             Encoding.UTF8.GetBytes(plainText),
             CredentialEntropy,
             DataProtectionScope.LocalMachine);
-        File.WriteAllBytes(_credFilePath, encrypted);
-        RestrictCredentialFile();
+
+        // 先写临时文件、收紧 ACL，再原子改名。
+        // 直接写目标文件会有一个"已落盘但仍沿用目录继承 ACL"的窗口。
+        var tempPath = _credFilePath + ".tmp";
+        try
+        {
+            File.WriteAllBytes(tempPath, encrypted);
+            RestrictCredentialFile(tempPath);
+            File.Move(tempPath, _credFilePath, true);
+        }
+        catch
+        {
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { /* best effort */ }
+            throw;
+        }
     }
+
+    /// <summary>是否存在上次留下的凭据文件（用于清理没有对应计划任务的残留）。</summary>
+    public bool HasStoredCredentials => File.Exists(_credFilePath);
 
     public (string Domain, string Username, string Password) LoadCredentials()
     {
@@ -126,8 +142,16 @@ public class DomainService
 
     public void CleanupCredentials()
     {
-        if (File.Exists(_credFilePath))
-            File.Delete(_credFilePath);
+        // 连临时文件一起清：中途失败时可能只剩 .tmp。
+        foreach (var path in new[] { _credFilePath, _credFilePath + ".tmp" })
+        {
+            try
+            {
+                if (File.Exists(path)) File.Delete(path);
+            }
+            catch (IOException) { /* 文件被占用时留给下次启动清理 */ }
+            catch (UnauthorizedAccessException) { /* 同上 */ }
+        }
     }
 
     public bool IsJoinedToDomain(string domain)
@@ -147,7 +171,7 @@ public class DomainService
         return false;
     }
 
-    private void RestrictCredentialFile()
+    private static void RestrictCredentialFile(string path)
     {
         var security = new FileSecurity();
         security.SetAccessRuleProtection(true, false);
@@ -157,7 +181,7 @@ public class DomainService
         security.AddAccessRule(new FileSystemAccessRule(
             new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
             FileSystemRights.FullControl, AccessControlType.Allow));
-        new FileInfo(_credFilePath).SetAccessControl(security);
+        new FileInfo(path).SetAccessControl(security);
     }
 
     private sealed record CredentialData(string Domain, string Username, string Password);

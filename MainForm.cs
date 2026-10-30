@@ -31,12 +31,33 @@ public partial class MainForm : Form
 
         _onLogHandler = line =>
         {
-            if (txtLog.InvokeRequired)
-                txtLog.Invoke(() => AppendLog(line));
-            else
-                AppendLog(line);
+            try
+            {
+                if (IsDisposed || !IsHandleCreated) return;
+                if (txtLog.InvokeRequired)
+                    txtLog.Invoke(() => AppendLog(line));
+                else
+                    AppendLog(line);
+            }
+            catch (ObjectDisposedException) { /* 窗体关闭中，丢弃这条日志 */ }
+            catch (InvalidOperationException) { /* 句柄已销毁 */ }
         };
         _logger.OnLog += _onLogHandler;
+
+        // 上次运行若在写入凭据后、创建任务前中断，会留下没有对应任务的加密凭据。
+        // 正常启动时清掉，避免口令长期滞留磁盘。
+        try
+        {
+            if (!_taskService.TaskExists() && _domainService.HasStoredCredentials)
+            {
+                _domainService.CleanupCredentials();
+                _logger.Warn("已清理没有对应计划任务的残留凭据文件");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn($"检查残留凭据失败: {ex.Message}");
+        }
     }
 
     protected override async void OnLoad(EventArgs e)
