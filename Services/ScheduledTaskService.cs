@@ -36,6 +36,20 @@ public class ScheduledTaskService
         RunSchtasks(new[] { "/Delete", "/TN", TaskName, "/F" }, 0, 1);
     }
 
+    /// <summary>计划任务是否已存在（用于清理没有对应任务的残留凭据）。</summary>
+    public bool TaskExists()
+    {
+        try
+        {
+            RunSchtasks(new[] { "/Query", "/TN", TaskName }, 0);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static void RunSchtasks(IEnumerable<string> arguments, params int[] acceptableExitCodes)
     {
         var psi = new ProcessStartInfo
