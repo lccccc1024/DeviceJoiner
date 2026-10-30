@@ -4,12 +4,16 @@ public class Logger
 {
     private readonly string _logDir;
     private readonly string _logFile;
+    private readonly long _maxLogBytes;
     private readonly object _lock = new();
+
+    private const long DefaultMaxLogBytes = 5 * 1024 * 1024;
 
     public event Action<string>? OnLog;
 
-    public Logger(string logPath)
+    public Logger(string logPath, long maxLogBytes = DefaultMaxLogBytes)
     {
+        _maxLogBytes = maxLogBytes > 0 ? maxLogBytes : DefaultMaxLogBytes;
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath)
             ?? AppDomain.CurrentDomain.BaseDirectory;
 
@@ -35,9 +39,28 @@ public class Logger
 
         lock (_lock)
         {
+            RotateIfNeeded();
             File.AppendAllText(_logFile, line + Environment.NewLine);
         }
 
         OnLog?.Invoke(line);
+    }
+
+    /// <summary>超过 5 MB 就滚成 .1（只保留一份备份），避免批量部署时日志无限增长。</summary>
+    private void RotateIfNeeded()
+    {
+        try
+        {
+            var info = new FileInfo(_logFile);
+            if (!info.Exists || info.Length < _maxLogBytes) return;
+
+            var backup = _logFile + ".1";
+            if (File.Exists(backup)) File.Delete(backup);
+            File.Move(_logFile, backup);
+        }
+        catch
+        {
+            // 轮转失败不应阻止写日志
+        }
     }
 }
