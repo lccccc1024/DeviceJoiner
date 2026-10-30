@@ -41,7 +41,8 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 
 - 域凭据仅为跨重启恢复流程临时保存，使用 Windows DPAPI（LocalMachine）加密，并限制文件 ACL 为 SYSTEM 和本地 Administrators。
 - 创建开机自启任务前会校验 exe 所在目录的权限：只要存在 `Everyone` / `Users` / `Authenticated Users` / `INTERACTIVE` 等非特权主体的可写 ACE（含继承），就直接拒绝创建任务。原因是该任务以 SYSTEM 身份运行 exe，普通用户替换 exe 即可获得系统权限。
-- 加域成功或达到最大重试次数后会删除凭据和计划任务。
+- 加域成功、遇到确定性失败（口令错误 / 域不存在 / 权限不足），或达到最大重试次数后，都会删除凭据和计划任务。
+- 无法记录重试次数时（例如 ProgramData 不可写），会直接删任务并清理凭据，避免每次开机无限重试。
 - `LocalMachine` DPAPI 不能抵御本机 SYSTEM/管理员级恶意软件。批量部署场景建议改用 Offline Domain Join（`djoin.exe`），避免在客户端保存域密码。
 
 ## 配置
