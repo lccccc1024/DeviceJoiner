@@ -38,6 +38,8 @@ git tag v1.4
 git push origin v1.4
 ```
 
+标签推送后即不可移动或删除（仓库启用了 `protect-release-tags` 规则集），发错版本请递增版本号重新发布。
+
 ## 使用
 
 1. 把 `DeviceJoiner.exe` 放在**仅管理员可写**的目录（推荐 `C:\Program Files\DeviceJoiner\`），再以管理员身份运行（会自动请求 UAC 提权）。若所在目录允许普通用户写入（桌面、下载目录、公共共享盘等），工具会拒绝创建开机自启任务并说明原因
