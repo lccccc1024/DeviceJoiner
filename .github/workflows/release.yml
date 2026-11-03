@@ -32,11 +32,19 @@ jobs:
         run: |
           $tag = "${{ github.ref_name }}"
           $version = $tag.TrimStart('v')
-          if ($version -notmatch '^\d+\.\d+\.\d+([.-][0-9A-Za-z.-]+)?$') {
-            throw "标签 '$tag' 不是合法的语义化版本号（期望形如 v1.3.0）"
+          if ($version -notmatch '^\d+(\.\d+){1,2}(-[0-9A-Za-z.]+)?$') {
+            throw "标签 '$tag' 不是合法的版本号（期望形如 v1.4 或 v1.4.0）"
           }
+
+          # 统一补齐为三段（1.3 -> 1.3.0），预发布后缀原样保留
+          $core, $pre = $version -split '-', 2
+          $parts = @($core -split '\.')
+          while ($parts.Count -lt 3) { $parts += '0' }
+          $version = $parts -join '.'
+          if ($pre) { $version = "$version-$pre" }
+
           "version=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "发布版本: $version"
+          Write-Host "标签 $tag -> 发布版本 $version"
 
       - name: Publish single-file exe
         shell: pwsh
