@@ -29,6 +29,15 @@ bin\Release\net8.0-windows\win-x64\publish\DeviceJoiner.exe
 
 自包含发布，无需安装 .NET 运行时。
 
+### 发布
+
+推送 `v*` 标签会触发 `.github/workflows/release.yml`，自动跑测试、构建单文件 exe，并把资产上传到同名 GitHub Release（exe 版本号取自标签，无需改代码）：
+
+```cmd
+git tag v1.4
+git push origin v1.4
+```
+
 ## 使用
 
 1. 把 `DeviceJoiner.exe` 放在**仅管理员可写**的目录（推荐 `C:\Program Files\DeviceJoiner\`），再以管理员身份运行（会自动请求 UAC 提权）。若所在目录允许普通用户写入（桌面、下载目录、公共共享盘等），工具会拒绝创建开机自启任务并说明原因

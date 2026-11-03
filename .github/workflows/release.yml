@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# 同一个标签重复推送时取消上一次未完成的发布，避免并发上传同一个资产
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Test join error policy
+        run: dotnet run --project tests/JoinErrorPolicyTests/JoinErrorPolicyTests.csproj -c Release
+
+      - name: Resolve version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          if ($version -notmatch '^\d+\.\d+\.\d+([.-][0-9A-Za-z.-]+)?$') {
+            throw "标签 '$tag' 不是合法的语义化版本号（期望形如 v1.3.0）"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "发布版本: $version"
+
+      - name: Publish single-file exe
+        shell: pwsh
+        run: >
+          dotnet publish DeviceJoiner.csproj -c Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:ContinuousIntegrationBuild=true
+
+      - name: Upload to GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $artifact = "bin/Release/net8.0-windows/win-x64/publish/DeviceJoiner.exe"
+          if (-not (Test-Path $artifact)) {
+            throw "未找到发布产物: $artifact"
+          }
+
+          # 标签对应的 Release 可能已手工创建（比如 v1.3），此时只替换资产，保留原有说明
+          $existing = gh release view $tag --json tagName --jq .tagName 2>$null
+          if ($existing) {
+            Write-Host "Release $tag 已存在，替换资产"
+            gh release upload $tag $artifact --clobber
+          } else {
+            Write-Host "创建 Release $tag"
+            gh release create $tag $artifact --verify-tag --title "DeviceJoiner $tag" --generate-notes
+          }
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash "bin/Release/net8.0-windows/win-x64/publish/DeviceJoiner.exe" -Algorithm SHA256).Hash
+          "**DeviceJoiner ${{ github.ref_name }}**" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "- 版本: ${{ steps.version.outputs.version }}" | Out-File -Append $env:GITHUB_STEP_SUMMARY
+          "- SHA256: ``$hash``" | Out-File -Append $env:GITHUB_STEP_SUMMARY
